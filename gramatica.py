@@ -63,30 +63,14 @@ class Gramatica:
                                 listaSiruri.append(noulSir)
                         break
     
-    def verificaSir(self, sir: str, afiseazaPasi: bool = True):
-        """
-        Verifică dacă un șir aparține gramaticii folosind algoritmul LR (shift-reduce).
-        Folosește tabelul de acțiuni și tabelul de salt.
-        
-        Args:
-            sir: Șirul de verificat
-            afiseazaPasi: Dacă True, afișează pașii algoritmului
-            
-        Returns:
-            True dacă șirul este acceptat, False altfel
-        """
+    def verificaSir(self, sir: str):
         if not self.tabel:
-            print("Eroare: Tabelul de analiză nu este încărcat!")
             return False
         
         # Inițializare
         stiva = [0]  # Stiva începe cu starea 0
         sir_input = sir + '$'  # Adaugă marcatorul de final
         pozitie = 0  # Poziția curentă în șir
-        
-        if afiseazaPasi:
-            print(f"\n{'Pas':<5} {'Stiva':<20} {'Input':<20} {'Actiune':<20}")
-            print("-" * 70)
         
         pas = 0
         
@@ -97,27 +81,21 @@ class Gramatica:
             stare_curenta = stiva[-1]
             
             # Simbolul curent din input
-            simbol_curent = sir_input[pozitie] if pozitie < len(sir_input) else '$'
+            if pozitie < len(sir_input):
+                simbol_curent = sir_input[pozitie]
+            else:
+                simbol_curent = '$'
             
             # Obține acțiunea din tabel
             actiune = self.tabel.obtine(stare_curenta, simbol_curent)
             
-            if afiseazaPasi:
-                stiva_str = ' '.join(str(x) for x in stiva)
-                input_str = sir_input[pozitie:]
-                print(f"{pas:<5} {stiva_str:<20} {input_str:<20} {actiune:<20}")
-            
             # Verifică tipul acțiunii
             if actiune == '0' or actiune == '':
                 # Eroare - acțiune invalidă
-                if afiseazaPasi:
-                    print(f"\nEroare: Nu există acțiune pentru starea {stare_curenta} și simbolul '{simbol_curent}'")
                 return False
             
             elif actiune == 'acc':
                 # Acceptare - șirul este valid
-                if afiseazaPasi:
-                    print("\nȘirul este ACCEPTAT!")
                 return True
             
             elif actiune[0] == 'd':
@@ -128,8 +106,6 @@ class Gramatica:
                     stiva.append(stare_noua)      # Adaugă starea nouă
                     pozitie += 1                  # Avansează în input
                 except ValueError:
-                    if afiseazaPasi:
-                        print(f"\nEroare: Acțiune invalidă '{actiune}'")
                     return False
             
             elif actiune[0] == 'r':
@@ -140,19 +116,18 @@ class Gramatica:
                     # Tabelul indexează producțiile de la 1, dar lista noastră de la 0
                     index_productie = numar_productie - 1
                     
-                    # Găsește producția corespunzătoare
+                    # Găsește producția corespunzătoare, daca productia nu exista sirul nu apartine limbajului
                     if index_productie < 0 or index_productie >= len(self.listaProductii):
-                        if afiseazaPasi:
-                            print(f"\nEroare: Producția {numar_productie} nu există (index {index_productie})")
                         return False
                     
                     productie = self.listaProductii[index_productie]
                     
                     # Numărul de simboluri din partea dreaptă a producției
+                    # Toate simbolurile sunt single-character
                     lungime_dreapta = len(productie.sirInlocuire)
                     
                     # Scoate 2 * lungime_dreapta elemente din stivă (stare + simbol pentru fiecare)
-                    # Dacă producția este epsilon (lungime 0), nu scoatem nimic
+                    # Dacă producția este de lungime 0, nu scoatem nimic
                     if lungime_dreapta > 0:
                         for _ in range(2 * lungime_dreapta):
                             if len(stiva) > 1:  # Nu scoatem starea inițială 0
@@ -168,29 +143,21 @@ class Gramatica:
                     stare_salt = self.tabel.obtine(stare_dupa_reduce, neterminal)
                     
                     if stare_salt == '0' or stare_salt == '':
-                        if afiseazaPasi:
-                            print(f"\nEroare: Nu există salt pentru starea {stare_dupa_reduce} și neterminalul '{neterminal}'")
                         return False
                     
                     # Adaugă neterminalul și starea de salt pe stivă
                     stiva.append(neterminal)
                     stiva.append(int(stare_salt))
                     
-                except (ValueError, IndexError) as e:
-                    if afiseazaPasi:
-                        print(f"\nEroare la reducere: {e}")
+                except (ValueError, IndexError):
                     return False
             
             else:
                 # Acțiune necunoscută
-                if afiseazaPasi:
-                    print(f"\nEroare: Acțiune necunoscută '{actiune}'")
                 return False
             
             # Protecție împotriva buclelor infinite
             if pas > 1000:
-                if afiseazaPasi:
-                    print("\nEroare: Prea mulți pași, posibilă buclă infinită")
                 return False
         
 class Productie:
@@ -225,11 +192,9 @@ class TabelGramatica:
                         self.tabel[numarLinie - 1][selector] = valori[i]
     
     def obtine(self, selectorLinie: int, selectorColoana: str):
-        """Returnează valoarea din tabel[selectorLinie][selectorColoana]"""
         return self.tabel.get(selectorLinie, {}).get(selectorColoana, '0')
     
     def afiseazaTabel(self):
-        """Afișează tabelul într-un format frumos"""
         # Header
         print("     ", end="")
         for selector in self.selectoriColoana:
