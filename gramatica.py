@@ -185,7 +185,7 @@ class TabelGramatica:
             # Restul liniilor - date (linia 1, 2, 3, ...)
             for numarLinie in range(1, len(linii)):
                 valori = linii[numarLinie].strip().split()
-                if valori:  # Verifică că linia nu e goală
+                if valori and len(valori) == len(self.selectoriColoana):  # Verifică că linia e validă
                     # Creează dicționar pentru această linie (indexul liniei = numarLinie - 1)
                     self.tabel[numarLinie - 1] = {}
                     for i, selector in enumerate(self.selectoriColoana):
