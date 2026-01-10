@@ -1,27 +1,22 @@
 from gramatica import Gramatica
-from gramatica import lungimeMaximaSir
 
-# Creează gramatica din fișier cu tabel
-gramatica = Gramatica("gramatica_profu.txt", "tabel_gramatica.txt")
+gramatica = Gramatica("gramatica_profu.txt")
 
-# Afișează gramatica
+# Afișează gramatica + tabel
 gramatica.afiseazaGramatica()
 
-# Afișează tabelul
-if gramatica.tabel:
-    print("\nTabel:")
-    gramatica.tabel.afiseazaTabel()
-
-# Șiruri de test
 siruri_test = [
     "a+a",
     "a*a",
     "a+a*a",
     "(a+a)",
+    "abc",
+    "a*a+(a*a+a)",
+    "a*a*a+(*)"
 ]
 
 for sir in siruri_test:
-    print(f"\nVerificare șir: '{sir}'")
+    print(f"\nVerificare sir: '{sir}'")
     rezultat = gramatica.verificaSir(sir)
     print(f"Rezultat: {'ACCEPTAT' if rezultat else 'RESPINS'}")
 

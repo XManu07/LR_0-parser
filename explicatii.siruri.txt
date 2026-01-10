@@ -1,6 +1,0 @@
-automat care verifica daca un sir apartine gramaticii
-ne folosim de tabel de la tema 2
-
-reductiile fac push si pop pe stiva
-deplasarile duc la pasul urmator si taie din sir punand pe stiva simbolul si deplasarea
-
