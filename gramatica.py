@@ -18,7 +18,7 @@ class Item:
         self.pozitiePunct = pozitiePunct
         
         # Generează reprezentarea string cu punct
-        self.sirCuPunct = self.sirInlocuire[:pozitiePunct] + '•' + self.sirInlocuire[pozitiePunct:]
+        self.sirCuPunct = self.sirInlocuire[:pozitiePunct] + '.' + self.sirInlocuire[pozitiePunct:]
     
     def esteFinal(self):
         """Verifică dacă punctul este la sfârșit (item de reducere)."""
@@ -48,7 +48,7 @@ class Item:
     
     def __str__(self):
         """Reprezentarea string a item-ului."""
-        return f"{self.simbolNeterminal} → {self.sirCuPunct}"
+        return f"{self.simbolNeterminal} -> {self.sirCuPunct}"
     
     def __repr__(self):
         return self.__str__()
@@ -161,11 +161,22 @@ class Gramatica:
         for setItemi in self.seturiItemi:
             stare = setItemi.id
             
-            # Verifică fiecare item din set
+            # Prima trecere: adaugă acțiunile shift
+            for item in setItemi.itemi:
+                if not item.esteFinal():
+                    # Item ne-final: A → α • X β
+                    # Verifică dacă există tranziție cu un terminal
+                    simbolDupaPunct = item.simbolDupaPunct()
+                    if simbolDupaPunct and simbolDupaPunct in self.listaTerminale:
+                        # Există tranziție cu terminal -> shift
+                        if (stare, simbolDupaPunct) in self.tranzitii:
+                            stareDestinație = self.tranzitii[(stare, simbolDupaPunct)]
+                            self.tabelAction[(stare, simbolDupaPunct)] = f's{stareDestinație}'
+            
+            # A doua trecere: adaugă acțiunile reduce (doar unde nu există shift)
             for item in setItemi.itemi:
                 if item.esteFinal():
                     # Item final: A → w •
-                    # Trebuie să adăugăm reduce pe toată linia pentru această stare
                     
                     # Găsește numărul regulii (index în listaProductii)
                     numarRegula = None
@@ -179,21 +190,14 @@ class Gramatica:
                         if numarRegula == 0:
                             # Regula augmentată S' → S$ •
                             # Adaugă accept pentru simbolul '$'
-                            self.tabelAction[(stare, '$')] = 'acc'
+                            if (stare, '$') not in self.tabelAction:
+                                self.tabelAction[(stare, '$')] = 'acc'
                         else:
                             # Reducere cu regula m (m > 0)
-                            # Completează toată linia pentru această stare cu reduce
+                            # Adaugă reduce pentru toți terminalii DOAR dacă nu există deja o acțiune
                             for terminal in self.listaTerminale:
-                                self.tabelAction[(stare, terminal)] = f'r{numarRegula}'
-                else:
-                    # Item ne-final: A → α • X β
-                    # Verifică dacă există tranziție cu un terminal
-                    simbolDupaPunct = item.simbolDupaPunct()
-                    if simbolDupaPunct and simbolDupaPunct in self.listaTerminale:
-                        # Există tranziție cu terminal -> shift
-                        if (stare, simbolDupaPunct) in self.tranzitii:
-                            stareDestinație = self.tranzitii[(stare, simbolDupaPunct)]
-                            self.tabelAction[(stare, simbolDupaPunct)] = f's{stareDestinație}'
+                                if (stare, terminal) not in self.tabelAction:
+                                    self.tabelAction[(stare, terminal)] = f'r{numarRegula}'
     
     def construiesteTabelGoto(self):
         """
@@ -231,8 +235,9 @@ class Gramatica:
         
         # Deschide fișierul pentru scriere
         with open(numeFisier, 'w') as f:
-            # Scrie header-ul (coloanele)
-            f.write('    '.join(coloane) + '\n')
+            # Scrie header-ul (coloanele) - fiecare coloană are lățime fixă de 5 caractere
+            header_parts = [col.ljust(5) for col in coloane]
+            f.write(''.join(header_parts).rstrip() + '\n')
             
             # Scrie fiecare stare
             for stare in range(len(self.seturiItemi)):
@@ -258,8 +263,9 @@ class Gramatica:
                     
                     linie.append(valoare)
                 
-                # Scrie linia pentru această stare
-                f.write('    '.join(linie) + '\n')
+                # Scrie linia pentru această stare - fiecare valoare are lățime fixă de 5 caractere
+                linie_parts = [val.ljust(5) for val in linie]
+                f.write(''.join(linie_parts).rstrip() + '\n')
         
     def genereazaSetItemi(self):
         """
@@ -505,17 +511,13 @@ class Gramatica:
                 try:
                     numar_productie = int(actiune[1:])
                     
-                    # Tabelul indexează producțiile de la 1, dar lista noastră de la 0
-                    index_productie = numar_productie - 1
-                    
-                    # Găsește producția corespunzătoare, daca productia nu exista sirul nu apartine limbajului
-                    if index_productie < 0 or index_productie >= len(self.listaProductii):
+                    # Găsește producția corespunzătoare
+                    if numar_productie < 0 or numar_productie >= len(self.listaProductii):
                         return False
                     
-                    productie = self.listaProductii[index_productie]
+                    productie = self.listaProductii[numar_productie]
                     
                     # Numărul de simboluri din partea dreaptă a producției
-                    # Toate simbolurile sunt single-character
                     lungime_dreapta = len(productie.sirInlocuire)
                     
                     # Scoate 2 * lungime_dreapta elemente din stivă (stare + simbol pentru fiecare)
