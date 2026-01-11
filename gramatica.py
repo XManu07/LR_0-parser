@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Set
 
 class Item:
     """
@@ -65,6 +65,53 @@ class Item:
         """Face item-urile hashable pentru utilizare în seturi și dicționare."""
         return hash((self.simbolNeterminal, self.sirInlocuire, self.pozitiePunct))
 
+class SetItemi:
+    """
+    Reprezintă un set de itemi LR(0) - o stare în automatonul LR.
+    Fiecare set conține mai mulți itemi (kernel + closure).
+    """
+    def __init__(self, itemi: Set[Item] = None, id_set: int = None):
+        """
+        Inițializează un set de itemi.
+        
+        Args:
+            itemi: Setul de itemi (kernel + closure)
+            id_set: ID-ul unic al acestui set (stare)
+        """
+        self.itemi = itemi if itemi is not None else set()
+        self.id = id_set
+    
+    def adaugaItem(self, item: Item):
+        """Adaugă un item în set."""
+        self.itemi.add(item)
+    
+    def contineItem(self, item: Item) -> bool:
+        """Verifică dacă setul conține deja itemul."""
+        return item in self.itemi
+    
+    def __eq__(self, other):
+        """Două seturi sunt egale dacă conțin aceiași itemi."""
+        if not isinstance(other, SetItemi):
+            return False
+        return self.itemi == other.itemi
+    
+    def __hash__(self):
+        """Face setul hashable pentru utilizare în dicționare și seturi."""
+        return hash(frozenset(self.itemi))
+    
+    def __str__(self):
+        """Reprezentarea string a setului de itemi."""
+        if self.id is not None:
+            rezultat = f"Set {self.id}:\n"
+        else:
+            rezultat = "Set de itemi:\n"
+        for item in sorted(self.itemi, key=lambda x: (x.simbolNeterminal, x.sirInlocuire, x.pozitiePunct)):
+            rezultat += f"  {item}\n"
+        return rezultat
+    
+    def __repr__(self):
+        return f"SetItemi(id={self.id}, {len(self.itemi)} itemi)"
+
 class Gramatica:
     def __init__(self, numeFisier: str):
         self.listaNeterminale = []
@@ -72,6 +119,8 @@ class Gramatica:
         self.simbolStart = ""
         self.listaProductii = []
         self.tabel = None
+        self.seturiItemi = []  # Lista de SetItemi (stările automatonului LR)
+        self.tranzitii = {}  # Dicționar {(id_set, simbol): id_set_destinație}
         self.citesteGramaticaDinFisier(numeFisier)
         self.genereazaTabel()
         
@@ -90,14 +139,127 @@ class Gramatica:
         """
         # Pasul 1: Augmentează gramatica
         self.augmenteazaGramatica()
+        self.genereazaSetItemi()
         
-        # TODO: Pasul 2-4 - Implementare algoritmul LR(0)
-        # self.construiesteStariLR()
-        # self.genereazaTabelActionGoto()
+    def genereazaSetItemi(self):
+        """
+        Generează toate seturile de itemi LR(0) accesibile și tranzițiile între ele.
+        Construiește automatonul finit pentru parsarea LR.
+        """
+        # Creează setul inițial cu primul item al regulii augmentate
+        # S' → • S$ (unde S este simbolul de start original)
+        itemInițial = Item(self.listaProductii[0], 0)
+        setInițial = SetItemi({itemInițial}, 0)
+        setInițial = self.closure(setInițial)
         
+        # Liste de seturi procesate și neprocessate
+        self.seturiItemi = [setInițial]
+        seturiNeprocessate = [setInițial]
+        
+        # Dicționar pentru a găsi rapid ID-ul unui set de itemi
+        mapareSeturi = {setInițial: 0}
+        
+        idCurent = 1
+        
+        # Procesează fiecare set până când nu mai sunt seturi noi
+        while seturiNeprocessate:
+            setCurent = seturiNeprocessate.pop(0)
+            
+            # Găsește toate simbolurile care apar după punct în itemii acestui set
+            simboluriDupaPunct = set()
+            for item in setCurent.itemi:
+                simbol = item.simbolDupaPunct()
+                if simbol is not None:
+                    simboluriDupaPunct.add(simbol)
+            
+            # Pentru fiecare simbol, calculează goto și adaugă tranziția
+            for simbol in simboluriDupaPunct:
+                setNou = self.goto(setCurent, simbol)
+                
+                # Verifică dacă acest set există deja
+                if setNou not in mapareSeturi:
+                    # Set nou - adaugă-l
+                    setNou.id = idCurent
+                    mapareSeturi[setNou] = idCurent
+                    self.seturiItemi.append(setNou)
+                    seturiNeprocessate.append(setNou)
+                    idCurent += 1
+                
+                # Adaugă tranziția
+                idDestinație = mapareSeturi[setNou]
+                self.tranzitii[(setCurent.id, simbol)] = idDestinație
+    
+    def closure(self, setItemi: SetItemi) -> SetItemi:
+        """
+        Calculează closure-ul unui set de itemi.
+        Adaugă recursiv toate itemii pentru neterminalele care apar după punct.
+        
+        Args:
+            setItemi: Setul de itemi inițial (kernel)
+            
+        Returns:
+            Noul set de itemi cu closure complet
+        """
+        # Creează un nou set cu aceiași itemi
+        rezultat = SetItemi(set(setItemi.itemi), setItemi.id)
+        
+        # Repetă până când nu mai sunt itemi noi de adăugat
+        adaugatItemiNoi = True
+        while adaugatItemiNoi:
+            adaugatItemiNoi = False
+            itemiCurenți = list(rezultat.itemi)
+            
+            for item in itemiCurenți:
+                simbolDupaPunct = item.simbolDupaPunct()
+                
+                # Dacă simbolul după punct este un neterminal
+                if simbolDupaPunct and simbolDupaPunct in self.listaNeterminale:
+                    # Găsește toate producțiile pentru acest neterminal
+                    for productie in self.listaProductii:
+                        if productie.simbolNeterminal == simbolDupaPunct:
+                            # Creează itemul B → • γ
+                            itemNou = Item(productie, 0)
+                            
+                            # Adaugă itemul dacă nu există deja
+                            if not rezultat.contineItem(itemNou):
+                                rezultat.adaugaItem(itemNou)
+                                adaugatItemiNoi = True
+        
+        return rezultat
+    
+    def goto(self, setItemi: SetItemi, simbol: str) -> SetItemi:
+        """
+        Calculează setul goto(I, X) - setul de itemi rezultat după citirea simbolului X.
+        
+        Args:
+            setItemi: Setul de itemi curent
+            simbol: Simbolul (terminal sau neterminal) citit
+            
+        Returns:
+            Noul set de itemi după tranziție
+        """
+        # Kernel-ul noului set: itemi cu punct avansat după simbol
+        itemiNoi = set()
+        
+        for item in setItemi.itemi:
+            # Verifică dacă itemul are simbolul după punct
+            if item.simbolDupaPunct() == simbol:
+                # Avansează punctul
+                # Găsește producția corespunzătoare pentru a crea un nou item
+                for productie in self.listaProductii:
+                    if (productie.simbolNeterminal == item.simbolNeterminal and 
+                        productie.sirInlocuire == item.sirInlocuire):
+                        itemNou = Item(productie, item.pozitiePunct + 1)
+                        itemiNoi.add(itemNou)
+                        break
+        
+        # Creează setul nou și aplică closure
+        setNou = SetItemi(itemiNoi)
+        return self.closure(setNou)
+    
     def augmenteazaGramatica(self):
         """
-        Augmentează gramatica adăugând un nou simbol de start S' și producția S' → S.
+        Augmentează gramatica adăugând un nou simbol de start S' și producția S' → S$.
         Aceasta este necesară pentru parsarea LR pentru a identifica clar finalul parsării.
         """
         # Creează noul simbol de start (simbolul vechi + apostrof)
@@ -107,11 +269,15 @@ class Gramatica:
         if simbolStartNou in self.listaNeterminale:
             return  # Gramatica este deja augmentată
         
+        # Adaugă simbolul de sfârșit $ la lista de terminale dacă nu există
+        if "$" not in self.listaTerminale:
+            self.listaTerminale.append("$")
+        
         # Adaugă noul simbol de start la lista de neterminale
         self.listaNeterminale.insert(0, simbolStartNou)
         
-        # Creează noua producție S' → S
-        productieNoua = Productie(simbolStartNou, self.simbolStart)
+        # Creează noua producție S' → S$ (simbolul vechi + $)
+        productieNoua = Productie(simbolStartNou, self.simbolStart + "$")
         
         # Inserează noua producție la începutul listei
         self.listaProductii.insert(0, productieNoua)
