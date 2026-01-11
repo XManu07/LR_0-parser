@@ -143,7 +143,7 @@ class Gramatica:
         self.augmenteazaGramatica()
         self.genereazaSetItemi()
         self.construiesteTabel()
-        self.scrieTabelInFisier("tabel_generat_" + numeFisier + ".txt")
+        self.scrieTabelInFisier(numeFisier)
         
     def construiesteTabel(self):
         """
@@ -204,6 +204,62 @@ class Gramatica:
         for (stare, simbol), stareDestinație in self.tranzitii.items():
             if simbol in self.listaNeterminale:
                 self.tabelGoto[(stare, simbol)] = stareDestinație
+    
+    def scrieTabelInFisier(self, numeFisier: str):
+        """
+        Scrie tabelele ACTION și GOTO într-un fișier în formatul standard.
+        Format: prima linie = coloane (terminale + neterminale), 
+                linii următoare = stări cu acțiuni/tranziții.
+        Valorile goale sunt marcate cu '0'.
+        
+        Args:
+            numeFisier: Numele fișierului de ieșire
+        """
+        # Construiește lista de coloane: terminale + neterminale (fără S' augmentat)
+        coloane = []
+        
+        # Adaugă terminale (fără $ la început, îl adăugăm la sfârșit pentru convenție)
+        for terminal in self.listaTerminale:
+            if terminal != '$':
+                coloane.append(terminal)
+        coloane.append('$')  # $ la final
+        
+        # Adaugă neterminale (exclude simbolul de start augmentat S')
+        for neterminal in self.listaNeterminale:
+            if neterminal != self.simbolStart:  # Exclude S' (simbolul augmentat)
+                coloane.append(neterminal)
+        
+        # Deschide fișierul pentru scriere
+        with open(numeFisier, 'w') as f:
+            # Scrie header-ul (coloanele)
+            f.write('    '.join(coloane) + '\n')
+            
+            # Scrie fiecare stare
+            for stare in range(len(self.seturiItemi)):
+                linie = []
+                
+                # Pentru fiecare coloană, găsește valoarea din tabel
+                for coloana in coloane:
+                    valoare = '0'  # Valoarea implicită pentru celule goale
+                    
+                    if coloana in self.listaTerminale:
+                        # Caută în tabelul ACTION
+                        if (stare, coloana) in self.tabelAction:
+                            actiune = self.tabelAction[(stare, coloana)]
+                            # Formatează acțiunea: 's5' -> 'd5', 'r3' -> 'r3', 'acc' -> 'acc'
+                            if actiune.startswith('s'):
+                                valoare = 'd' + actiune[1:]  # Shift devine 'd' (deplasare)
+                            else:
+                                valoare = actiune  # 'r{nr}' sau 'acc'
+                    else:
+                        # Caută în tabelul GOTO
+                        if (stare, coloana) in self.tabelGoto:
+                            valoare = str(self.tabelGoto[(stare, coloana)])
+                    
+                    linie.append(valoare)
+                
+                # Scrie linia pentru această stare
+                f.write('    '.join(linie) + '\n')
         
     def genereazaSetItemi(self):
         """
