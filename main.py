@@ -2,7 +2,7 @@ from gramatica import Gramatica
 from gramatica import lungimeMaximaSir
 
 # Creează gramatica din fișier cu tabel
-gramatica = Gramatica("gramatica_profu.txt", "tabel_gramatica.txt")
+gramatica = Gramatica("gramatica_profu.txt")
 
 # Afișează gramatica
 gramatica.afiseazaGramatica()

@@ -1,8 +1,9 @@
-S A B C
-a b
-S
-S->A
-S->Aa
-A->B
-A->Ab
-B->ab
+E T F
+a + * ( )
+E
+E->E+T
+E->T
+T->T*F
+T->F
+F->(E)
+F->a

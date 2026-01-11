@@ -1,17 +1,22 @@
 from typing import List
 
 class Gramatica:
-    def __init__(self, numeFisier: str, numeFisierTabel: str = None):
+    def __init__(self, numeFisier: str):
         self.listaNeterminale = []
         self.listaTerminale = []
         self.simbolStart = ""
         self.listaProductii = []
         self.tabel = None
         self.citesteGramaticaDinFisier(numeFisier)
+        self.genereazaTabel()
         
-        # Citește tabelul dacă e furnizat
-        if numeFisierTabel:
-            self.tabel = TabelGramatica(numeFisierTabel)
+        try:
+            self.tabel = TabelGramatica("tabel_generat_" + numeFisier + ".txt")
+        except Exception as e:
+            print(f"Eroare la citirea tabelului: {e}")
+        
+    def genereazaTabel(self):
+        pass
         
     def citesteGramaticaDinFisier(self, numeFisier: str):
         with open(numeFisier, 'r') as f:
