@@ -121,15 +121,17 @@ class Gramatica:
         self.tabel = None
         self.seturiItemi = []  # Lista de SetItemi (stările automatonului LR)
         self.tranzitii = {}  # Dicționar {(id_set, simbol): id_set_destinație}
+        self.tabelAction = {}  # Dicționar {(stare, terminal): acțiune}
+        self.tabelGoto = {}  # Dicționar {(stare, neterminal): stare_nouă}
         self.citesteGramaticaDinFisier(numeFisier)
-        self.genereazaTabel()
+        self.genereazaTabel("tabel_generat_" + numeFisier + ".txt")
         
         try:
             self.tabel = TabelGramatica("tabel_generat_" + numeFisier + ".txt")
         except Exception as e:
             print(f"Eroare la citirea tabelului: {e}")
         
-    def genereazaTabel(self):
+    def genereazaTabel(self, numeFisier: str):
         """
         Generează tabelul de parsare LR.
         1. Augmentează gramatica (S' → S)
@@ -140,6 +142,68 @@ class Gramatica:
         # Pasul 1: Augmentează gramatica
         self.augmenteazaGramatica()
         self.genereazaSetItemi()
+        self.construiesteTabel()
+        self.scrieTabelInFisier("tabel_generat_" + numeFisier + ".txt")
+        
+    def construiesteTabel(self):
+        """
+        Construiește tabelele ACTION și GOTO pentru parserul LR(0).
+        """
+        self.construiesteTabelAction()
+        self.construiesteTabelGoto()
+    
+    def construiesteTabelAction(self):
+        """
+        Construiește tabelul ACTION pentru parserul LR(0).
+        Tabelul conține acțiuni shift, reduce și accept pentru fiecare combinație (stare, terminal).
+        """
+        # Iterează prin toate seturile de itemi (stările)
+        for setItemi in self.seturiItemi:
+            stare = setItemi.id
+            
+            # Verifică fiecare item din set
+            for item in setItemi.itemi:
+                if item.esteFinal():
+                    # Item final: A → w •
+                    # Trebuie să adăugăm reduce pe toată linia pentru această stare
+                    
+                    # Găsește numărul regulii (index în listaProductii)
+                    numarRegula = None
+                    for idx, productie in enumerate(self.listaProductii):
+                        if (productie.simbolNeterminal == item.simbolNeterminal and 
+                            productie.sirInlocuire == item.sirInlocuire):
+                            numarRegula = idx
+                            break
+                    
+                    if numarRegula is not None:
+                        if numarRegula == 0:
+                            # Regula augmentată S' → S$ •
+                            # Adaugă accept pentru simbolul '$'
+                            self.tabelAction[(stare, '$')] = 'acc'
+                        else:
+                            # Reducere cu regula m (m > 0)
+                            # Completează toată linia pentru această stare cu reduce
+                            for terminal in self.listaTerminale:
+                                self.tabelAction[(stare, terminal)] = f'r{numarRegula}'
+                else:
+                    # Item ne-final: A → α • X β
+                    # Verifică dacă există tranziție cu un terminal
+                    simbolDupaPunct = item.simbolDupaPunct()
+                    if simbolDupaPunct and simbolDupaPunct in self.listaTerminale:
+                        # Există tranziție cu terminal -> shift
+                        if (stare, simbolDupaPunct) in self.tranzitii:
+                            stareDestinație = self.tranzitii[(stare, simbolDupaPunct)]
+                            self.tabelAction[(stare, simbolDupaPunct)] = f's{stareDestinație}'
+    
+    def construiesteTabelGoto(self):
+        """
+        Construiește tabelul GOTO pentru parserul LR(0).
+        Tabelul conține tranziții pentru neterminale.
+        """
+        # Copiază tranzițiile cu neterminale în tabelul GOTO
+        for (stare, simbol), stareDestinație in self.tranzitii.items():
+            if simbol in self.listaNeterminale:
+                self.tabelGoto[(stare, simbol)] = stareDestinație
         
     def genereazaSetItemi(self):
         """
