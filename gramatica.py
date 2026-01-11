@@ -1,5 +1,70 @@
 from typing import List
 
+class Item:
+    """
+    Reprezintă un item LR(0) - o regulă gramaticală cu un punct care indică poziția în parsare.
+    De exemplu, E → E • + B indică faptul că am recunoscut E și așteptăm + B în continuare.
+    """
+    def __init__(self, productie, pozitiePunct):
+        """
+        Inițializează un item LR(0).
+        
+        Args:
+            productie: Un obiect Productie care conține regula gramaticală
+            pozitiePunct: Poziția întreagă a punctului (0 până la len(sirInlocuire))
+        """
+        self.simbolNeterminal = productie.simbolNeterminal
+        self.sirInlocuire = productie.sirInlocuire
+        self.pozitiePunct = pozitiePunct
+        
+        # Generează reprezentarea string cu punct
+        self.sirCuPunct = self.sirInlocuire[:pozitiePunct] + '•' + self.sirInlocuire[pozitiePunct:]
+    
+    def esteFinal(self):
+        """Verifică dacă punctul este la sfârșit (item de reducere)."""
+        return self.pozitiePunct >= len(self.sirInlocuire)
+    
+    def esteInitial(self):
+        """Verifică dacă punctul este la început."""
+        return self.pozitiePunct == 0
+    
+    def simbolDupaPunct(self):
+        """
+        Returnează simbolul imediat după punct, sau None dacă este la sfârșit.
+        Indică ce simbolul pe care parserul se așteaptă să îl vadă în continuare.
+        """
+        if self.esteFinal():
+            return None
+        return self.sirInlocuire[self.pozitiePunct]
+    
+    def avansare(self, productie):
+        """
+        Creează un nou item cu punctul avansat cu o poziție.
+        Folosit când se deplasează un simbol pe stivă.
+        """
+        if self.esteFinal():
+            return None
+        return Item(productie, self.pozitiePunct + 1)
+    
+    def __str__(self):
+        """Reprezentarea string a item-ului."""
+        return f"{self.simbolNeterminal} → {self.sirCuPunct}"
+    
+    def __repr__(self):
+        return self.__str__()
+    
+    def __eq__(self, other):
+        """Verifică egalitatea cu alt item."""
+        if not isinstance(other, Item):
+            return False
+        return (self.simbolNeterminal == other.simbolNeterminal and 
+                self.sirInlocuire == other.sirInlocuire and 
+                self.pozitiePunct == other.pozitiePunct)
+    
+    def __hash__(self):
+        """Face item-urile hashable pentru utilizare în seturi și dicționare."""
+        return hash((self.simbolNeterminal, self.sirInlocuire, self.pozitiePunct))
+
 class Gramatica:
     def __init__(self, numeFisier: str):
         self.listaNeterminale = []
@@ -16,7 +81,43 @@ class Gramatica:
             print(f"Eroare la citirea tabelului: {e}")
         
     def genereazaTabel(self):
-        pass
+        """
+        Generează tabelul de parsare LR.
+        1. Augmentează gramatica (S' → S)
+        2. Construiește itemii LR(0)
+        3. Calculează closure și goto pentru stări
+        4. Generează tabelul ACTION și GOTO
+        """
+        # Pasul 1: Augmentează gramatica
+        self.augmenteazaGramatica()
+        
+        # TODO: Pasul 2-4 - Implementare algoritmul LR(0)
+        # self.construiesteStariLR()
+        # self.genereazaTabelActionGoto()
+        
+    def augmenteazaGramatica(self):
+        """
+        Augmentează gramatica adăugând un nou simbol de start S' și producția S' → S.
+        Aceasta este necesară pentru parsarea LR pentru a identifica clar finalul parsării.
+        """
+        # Creează noul simbol de start (simbolul vechi + apostrof)
+        simbolStartNou = self.simbolStart + "'"
+        
+        # Verifică dacă gramatica nu este deja augmentată
+        if simbolStartNou in self.listaNeterminale:
+            return  # Gramatica este deja augmentată
+        
+        # Adaugă noul simbol de start la lista de neterminale
+        self.listaNeterminale.insert(0, simbolStartNou)
+        
+        # Creează noua producție S' → S
+        productieNoua = Productie(simbolStartNou, self.simbolStart)
+        
+        # Inserează noua producție la începutul listei
+        self.listaProductii.insert(0, productieNoua)
+        
+        # Actualizează simbolul de start
+        self.simbolStart = simbolStartNou
         
     def citesteGramaticaDinFisier(self, numeFisier: str):
         with open(numeFisier, 'r') as f:
