@@ -123,11 +123,13 @@ class Gramatica:
         self.tranzitii = {}  # Dicționar {(id_set, simbol): id_set_destinație}
         self.tabelAction = {}  # Dicționar {(stare, terminal): acțiune}
         self.tabelGoto = {}  # Dicționar {(stare, neterminal): stare_nouă}
+        self.first = {}  # Dicționar {neterminal: set(terminali)}
+        self.follow = {}  # Dicționar {neterminal: set(terminali)}
         self.citesteGramaticaDinFisier(numeFisier)
-        self.genereazaTabel("tabel_generat_" + numeFisier + ".txt")
+        self.genereazaTabel("tabel_generat_" + numeFisier)
         
         try:
-            self.tabel = TabelGramatica("tabel_generat_" + numeFisier + ".txt")
+            self.tabel = TabelGramatica("tabel_generat_" + numeFisier)
         except Exception as e:
             print(f"Eroare la citirea tabelului: {e}")
         
@@ -141,6 +143,10 @@ class Gramatica:
         """
         # Pasul 1: Augmentează gramatica
         self.augmenteazaGramatica()
+        # Pasul 2: Calculează FIRST și FOLLOW pentru SLR
+        self.calculeazaFirst()
+        self.calculeazaFollow()
+        # Pasul 3: Generează seturile de itemi
         self.genereazaSetItemi()
         self.construiesteTabel()
         self.scrieTabelInFisier(numeFisier)
@@ -159,9 +165,10 @@ class Gramatica:
         """
         # Iterează prin toate seturile de itemi (stările)
         for setItemi in self.seturiItemi:
-            stare = setItemi.id
+            indexSet = setItemi.id
             
-            # Prima trecere: adaugă acțiunile shift
+            # Prima trecere: adaugă acțiunile shift daca itemul nu este final iar simbolul dupa punct este terminal 
+            # si exista tranzitie pentru el din starea curenta
             for item in setItemi.itemi:
                 if not item.esteFinal():
                     # Item ne-final: A → α • X β
@@ -169,9 +176,9 @@ class Gramatica:
                     simbolDupaPunct = item.simbolDupaPunct()
                     if simbolDupaPunct and simbolDupaPunct in self.listaTerminale:
                         # Există tranziție cu terminal -> shift
-                        if (stare, simbolDupaPunct) in self.tranzitii:
-                            stareDestinație = self.tranzitii[(stare, simbolDupaPunct)]
-                            self.tabelAction[(stare, simbolDupaPunct)] = f's{stareDestinație}'
+                        if (indexSet, simbolDupaPunct) in self.tranzitii:
+                            indexSetDestinatie = self.tranzitii[(indexSet, simbolDupaPunct)]
+                            self.tabelAction[(indexSet, simbolDupaPunct)] = f'd{indexSetDestinatie}'
             
             # A doua trecere: adaugă acțiunile reduce (doar unde nu există shift)
             for item in setItemi.itemi:
@@ -190,19 +197,20 @@ class Gramatica:
                         if numarRegula == 0:
                             # Regula augmentată S' → S$ •
                             # Adaugă accept pentru simbolul '$'
-                            if (stare, '$') not in self.tabelAction:
-                                self.tabelAction[(stare, '$')] = 'acc'
+                            self.tabelAction[(indexSet, '$')] = 'acc'
                         else:
-                            # Reducere cu regula m (m > 0)
-                            # Adaugă reduce pentru toți terminalii DOAR dacă nu există deja o acțiune
-                            for terminal in self.listaTerminale:
-                                if (stare, terminal) not in self.tabelAction:
-                                    self.tabelAction[(stare, terminal)] = f'r{numarRegula}'
+                            # Reducere cu regula m (m > 0) - SLR
+                            # Adaugă reduce doar pentru terminalii din FOLLOW(A)
+                            neterminal = item.simbolNeterminal
+                            followSet = self.follow.get(neterminal, set())
+                            for terminal in followSet:
+                                if (indexSet, terminal) not in self.tabelAction:
+                                    self.tabelAction[(indexSet, terminal)] = f'r{numarRegula}'
     
     def construiesteTabelGoto(self):
         """
         Construiește tabelul GOTO pentru parserul LR(0).
-        Tabelul conține tranziții pentru neterminale.
+        Tabelul conține tranziții pentru neterminale (indexul setului de itemi din care se ajunge la noul set)
         """
         # Copiază tranzițiile cu neterminale în tabelul GOTO
         for (stare, simbol), stareDestinație in self.tranzitii.items():
@@ -251,11 +259,8 @@ class Gramatica:
                         # Caută în tabelul ACTION
                         if (stare, coloana) in self.tabelAction:
                             actiune = self.tabelAction[(stare, coloana)]
-                            # Formatează acțiunea: 's5' -> 'd5', 'r3' -> 'r3', 'acc' -> 'acc'
-                            if actiune.startswith('s'):
-                                valoare = 'd' + actiune[1:]  # Shift devine 'd' (deplasare)
-                            else:
-                                valoare = actiune  # 'r{nr}' sau 'acc'
+                            # Formatează acțiunea: 'd5', 'r3', 'acc'
+                            valoare = actiune
                     else:
                         # Caută în tabelul GOTO
                         if (stare, coloana) in self.tabelGoto:
@@ -315,10 +320,100 @@ class Gramatica:
                 idDestinație = mapareSeturi[setNou]
                 self.tranzitii[(setCurent.id, simbol)] = idDestinație
     
+    def calculeazaFirst(self):
+        """
+        First(A) este multimea de terminali cu care poate incepe un sir derivat din neterminalul A
+        """
+        # Inițializează FIRST cu mulțimi goale
+        for neterminal in self.listaNeterminale:
+            self.first[neterminal] = set()
+        
+        # Repetă până când nu mai sunt schimbări
+        schimbat = True
+        while schimbat:
+            schimbat = False
+            
+            for productie in self.listaProductii:
+                neterminal = productie.simbolNeterminal
+                sirDreapta = productie.sirInlocuire
+                
+                primulSimbol = sirDreapta[0]
+                
+                if primulSimbol in self.listaTerminale:
+                    # Primul simbol este terminal
+                    if primulSimbol not in self.first[neterminal]:
+                        self.first[neterminal].add(primulSimbol)
+                        schimbat = True
+                elif primulSimbol in self.listaNeterminale:
+                    # Primul simbol este neterminal
+                    # Adaugă FIRST(primul simbol) la FIRST(neterminal)
+                    for terminal in self.first[primulSimbol]:
+                        if terminal not in self.first[neterminal]:
+                            self.first[neterminal].add(terminal)
+                            schimbat = True
+    
+    def calculeazaFollow(self):
+        """
+        Follow(A) este multimea de terminali care pot aprea imediat dupa neterminalul A intr o derivare
+        """
+        # Inițializează FOLLOW cu mulțimi goale
+        for neterminal in self.listaNeterminale:
+            self.follow[neterminal] = set()
+        
+        # Adaugă $ în FOLLOW(S) pentru simbolul de start
+        if self.simbolStart in self.listaNeterminale:
+            self.follow[self.simbolStart].add('$')
+        
+        # Repetă până când nu mai sunt schimbări
+        schimbat = True
+        while schimbat:
+            schimbat = False
+            
+            for productie in self.listaProductii:
+                neterminalStanga = productie.simbolNeterminal
+                sirDreapta = productie.sirInlocuire
+                
+                # Parcurge fiecare simbol din partea dreaptă
+                for i in range(len(sirDreapta)):
+                    simbol = sirDreapta[i]
+                    
+                    # Interesează doar neterminalele
+                    if simbol not in self.listaNeterminale:
+                        continue
+                    
+                    # Verifică ce urmează după acest neterminal
+                    if i + 1 < len(sirDreapta):
+                        # Mai sunt simboluri după
+                        simbolUrmator = sirDreapta[i + 1]
+                        
+                        if simbolUrmator in self.listaTerminale:
+                            # Următorul simbol este terminal
+                            if simbolUrmator not in self.follow[simbol]:
+                                self.follow[simbol].add(simbolUrmator)
+                                schimbat = True
+                        elif simbolUrmator in self.listaNeterminale:
+                            # Următorul simbol este neterminal
+                            # Adaugă FIRST(simbolUrmator) la FOLLOW(simbol)
+                            for terminal in self.first[simbolUrmator]:
+                                if terminal not in self.follow[simbol]:
+                                    self.follow[simbol].add(terminal)
+                                    schimbat = True
+                            
+                            # Dacă simbolul următor poate deriva epsilon, adaugă FOLLOW(neterminalStanga)
+                            # Pentru simplitate, presupunem că nu avem producții epsilon
+                    else:
+                        # Neterminalul este ultimul simbol: A → αB
+                        # Adaugă FOLLOW(A) la FOLLOW(B)
+                        for terminal in self.follow[neterminalStanga]:
+                            if terminal not in self.follow[simbol]:
+                                self.follow[simbol].add(terminal)
+                                schimbat = True
+    
     def closure(self, setItemi: SetItemi) -> SetItemi:
         """
-        Calculează closure-ul unui set de itemi.
-        Adaugă recursiv toate itemii pentru neterminalele care apar după punct.
+        Closure pleaca de la un set de itemi (kernel)
+        Pentru fiecare item din set, daca simbolul dupa punct este un neterminal,
+        se adauga in set toti itemii proveniti din productiile acelui neterminal, cu punctul la inceput.
         
         Args:
             setItemi: Setul de itemi inițial (kernel)
@@ -334,7 +429,8 @@ class Gramatica:
         while adaugatItemiNoi:
             adaugatItemiNoi = False
             itemiCurenți = list(rezultat.itemi)
-            
+
+            # Pentru fiecare item în setul curent
             for item in itemiCurenți:
                 simbolDupaPunct = item.simbolDupaPunct()
                 
@@ -355,7 +451,9 @@ class Gramatica:
     
     def goto(self, setItemi: SetItemi, simbol: str) -> SetItemi:
         """
-        Calculează setul goto(I, X) - setul de itemi rezultat după citirea simbolului X.
+        Functia goto returneaza un nou set de itemi (stare) + closure pe acest nou set
+        Functia goto trece prin itemi primiti ca parametru
+        și avansează punctul pentru toți itemii care au simbolul dupa punct egal cu simbolul dat ca parametru.
         
         Args:
             setItemi: Setul de itemi curent
@@ -368,7 +466,7 @@ class Gramatica:
         itemiNoi = set()
         
         for item in setItemi.itemi:
-            # Verifică dacă itemul are simbolul după punct
+            # Verifică dacă itemul are simbol după punct egal cu simbolul dat
             if item.simbolDupaPunct() == simbol:
                 # Avansează punctul
                 # Găsește producția corespunzătoare pentru a crea un nou item
