@@ -688,7 +688,7 @@ class Gramatica:
                                 place_values.append(stiva_atribute.pop())
                     
                     # Execută acțiunea semantică (returnează place value pentru neterminal)
-                    place_nou = productie.executa_actiune_semantica(place_values, self.generator)
+                    place_nou = productie.genereaza_actiune_intermediara(place_values, self.generator)
                     
                     # Starea după reducere
                     stare_dupa_reduce = stiva_stari[-1]
