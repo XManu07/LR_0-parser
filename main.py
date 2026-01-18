@@ -16,8 +16,16 @@ siruri_test = [
 
 for sir in siruri_test:
     print(f"\nVerificare sir: '{sir}'")
+    
     rezultat = gramatica.verificaSir(sir)
-    print(f"Rezultat: {'ACCEPTAT' if rezultat else 'RESPINS'}")
+    
+    if rezultat:
+        print("ACCEPTAT")
+        gramatica.generator.afiseaza_cod_intermediar()
+    else:
+        print("RESPINS")
+    
+    print()
 
 # print("\n\nLanturi generate:")
 # gramatica.genereazaLanturi(lungimeMaximaSir)

@@ -1,5 +1,45 @@
 from typing import List, Set
 
+class GeneratorCodIntermediar:
+    """
+    Gestionează generarea de cod intermediar și variabile temporare.
+    """
+    def __init__(self):
+        self.contor_temp = 0
+        self.cod_intermediar = []
+    
+    def newtemp(self):
+        """
+        Generează și returnează o nouă variabilă temporară.
+        Returns: string de forma 't1', 't2', etc.
+        """
+        self.contor_temp += 1
+        return f't{self.contor_temp}'
+    
+    def emit(self, instructiune):
+        """
+        Emite (adaugă) o instrucțiune de cod intermediar.
+        Args:
+            instructiune: string cu instrucțiunea (ex: "t1 := a + b")
+        """
+        self.cod_intermediar.append(instructiune)
+    
+    def afiseaza_cod_intermediar(self):
+        """
+        Afișează tot codul intermediar generat.
+        """
+        print("Cod Intermediar Generat:")
+        for i, instructiune in enumerate(self.cod_intermediar, 1):
+            print(f"{i}. {instructiune}")
+    
+    def reseteaza(self):
+        """
+        Resetează generatorul pentru o nouă parsare.
+        """
+        self.contor_temp = 0
+        self.cod_intermediar = []
+
+
 class Item:
     """
     Reprezintă un item LR(0) - o regulă gramaticală cu un punct care indică poziția în parsare.
@@ -125,6 +165,7 @@ class Gramatica:
         self.tabelGoto = {}  # Dicționar {(stare, neterminal): stare_nouă}
         self.first = {}  # Dicționar {neterminal: set(terminali)}
         self.follow = {}  # Dicționar {neterminal: set(terminali)}
+        self.generator = GeneratorCodIntermediar()  # Generator pentru cod intermediar
         self.citesteGramaticaDinFisier(numeFisier)
         self.genereazaTabel("tabel_generat_" + numeFisier)
         
@@ -559,97 +600,115 @@ class Gramatica:
                                 listaSiruri.append(noulSir)
                         break
     
-    def verificaSir(self, sir: str):
+    def verificaSir(self, sir_intrare: str):
+        """
+        Parsează un șir de intrare și generează cod intermediar (Three-Address Code).
+        Translator Push Down pentru expresii aritmetice.
+        
+        Args:
+            sir_intrare: String cu expresia aritmetică (ex: "a+a*a")
+        
+        Returns:
+            True dacă șirul este acceptat, False altfel
+        """
         if not self.tabel:
             return False
         
-        # Inițializare
-        stiva = [0]  # Stiva începe cu starea 0
-        sir_input = sir + '$'  # Adaugă marcatorul de final
-        pozitie = 0  # Poziția curentă în șir
+        # Reset generator
+        self.generator.reseteaza()
         
+        # Inițializare - 3 stive paralele sincronizate
+        stiva_simboluri = ['$']      # Stiva de simboluri (terminale și neterminale)
+        stiva_stari = [0]            # Stiva de stări din automatonul LR
+        stiva_atribute = []          # Stiva de place values (string-uri: 'a', 't1', 't2', etc.)
+        sir_input = sir_intrare + '$'
+        pozitie = 0
         pas = 0
+        max_pasi = 1000
         
         while True:
             pas += 1
+            if pas > max_pasi:
+                return False
             
-            # Starea curentă = vârful stivei
-            stare_curenta = stiva[-1]
+            # Starea curentă
+            stare_curenta = stiva_stari[-1]
             
             # Simbolul curent din input
-            if pozitie < len(sir_input):
-                simbol_curent = sir_input[pozitie]
-            else:
-                simbol_curent = '$'
+            simbol_curent = sir_input[pozitie] if pozitie < len(sir_input) else '$'
             
             # Obține acțiunea din tabel
             actiune = self.tabel.obtine(stare_curenta, simbol_curent)
             
             # Verifică tipul acțiunii
             if actiune == '0' or actiune == '':
-                # Eroare - acțiune invalidă
                 return False
             
             elif actiune == 'acc':
-                # Acceptare - șirul este valid
                 return True
             
             elif actiune[0] == 'd':
-                # Shift (deplasare) - d<stare>
+                # Shift (deplasare) - adaugă în toate cele 3 stive
                 try:
                     stare_noua = int(actiune[1:])
-                    stiva.append(simbol_curent)  # Adaugă simbolul
-                    stiva.append(stare_noua)      # Adaugă starea nouă
-                    pozitie += 1                  # Avansează în input
+                    
+                    # Pentru terminale, place value = simbolul însuși
+                    place_val = simbol_curent
+                    
+                    # Sincronizare: adaugă în toate cele 3 stive
+                    stiva_simboluri.append(simbol_curent)
+                    stiva_stari.append(stare_noua)
+                    stiva_atribute.append(place_val)
+                    pozitie += 1
+                    
                 except ValueError:
                     return False
             
             elif actiune[0] == 'r':
-                # Reduce (reducere) - r<numar_productie>
+                # Reduce (reducere) - scoate din toate cele 3 stive
                 try:
                     numar_productie = int(actiune[1:])
                     
-                    # Găsește producția corespunzătoare
                     if numar_productie < 0 or numar_productie >= len(self.listaProductii):
                         return False
                     
                     productie = self.listaProductii[numar_productie]
+                    lungime_productie = len(productie.sirInlocuire)
                     
-                    # Numărul de simboluri din partea dreaptă a producției
-                    lungime_dreapta = len(productie.sirInlocuire)
+                    # Scoate simbolurile, stările și place values corespunzătoare din toate stivele
+                    place_values = []
+                    if lungime_productie > 0:
+                        for _ in range(lungime_productie):
+                            # Sincronizare: scoate din toate cele 3 stive
+                            if stiva_simboluri and len(stiva_simboluri) > 1:
+                                stiva_simboluri.pop()
+                            if stiva_stari and len(stiva_stari) > 1:
+                                stiva_stari.pop()
+                            if stiva_atribute:
+                                place_values.append(stiva_atribute.pop())
                     
-                    # Scoate 2 * lungime_dreapta elemente din stivă (stare + simbol pentru fiecare)
-                    # Dacă producția este de lungime 0, nu scoatem nimic
-                    if lungime_dreapta > 0:
-                        for _ in range(2 * lungime_dreapta):
-                            if len(stiva) > 1:  # Nu scoatem starea inițială 0
-                                stiva.pop()
+                    # Execută acțiunea semantică (returnează place value pentru neterminal)
+                    place_nou = productie.executa_actiune_semantica(place_values, self.generator)
                     
-                    # Starea de pe vârful stivei după reducere
-                    stare_dupa_reduce = stiva[-1]
-                    
-                    # Neterminalul din partea stângă a producției
+                    # Starea după reducere
+                    stare_dupa_reduce = stiva_stari[-1]
                     neterminal = productie.simbolNeterminal
                     
-                    # Obține starea de salt din tabel
+                    # Goto
                     stare_salt = self.tabel.obtine(stare_dupa_reduce, neterminal)
                     
                     if stare_salt == '0' or stare_salt == '':
                         return False
                     
-                    # Adaugă neterminalul și starea de salt pe stivă
-                    stiva.append(neterminal)
-                    stiva.append(int(stare_salt))
+                    # Sincronizare: adaugă neterminalul, starea nouă și place value în toate stivele
+                    stiva_simboluri.append(neterminal)
+                    stiva_stari.append(int(stare_salt))
+                    stiva_atribute.append(place_nou)
                     
                 except (ValueError, IndexError):
                     return False
             
             else:
-                # Acțiune necunoscută
-                return False
-            
-            # Protecție împotriva buclelor infinite
-            if pas > 1000:
                 return False
         
 class Productie:
@@ -659,6 +718,57 @@ class Productie:
 
     def afiseazaProductie(self):
         print(self.simbolNeterminal + " -> " + self.sirInlocuire)
+    
+    def genereaza_actiune_intermediara(self, place_values, generator):
+        """
+        Execută acțiunea semantică asociată acestei producții.
+        
+        Args:
+            place_values: Lista de place values (string-uri) în ordine inversă de pe stivă
+            generator: GeneratorCodIntermediar pentru generare cod
+        
+        Returns:
+            String reprezentând place value pentru neterminalul din stânga producției
+        """
+        # E → E + T
+        if self.simbolNeterminal == 'E' and self.sirInlocuire == 'E+T':
+            T_place = place_values[0]
+            E1_place = place_values[2]
+            E_place = generator.newtemp()
+            generator.emit(f"{E_place} := {E1_place} + {T_place}")
+            return E_place
+        
+        # E → T
+        elif self.simbolNeterminal == 'E' and self.sirInlocuire == 'T':
+            T_place = place_values[0]
+            return T_place
+        
+        # T → T * F
+        elif self.simbolNeterminal == 'T' and self.sirInlocuire == 'T*F':
+            F_place = place_values[0]
+            T1_place = place_values[2]
+            T_place = generator.newtemp()
+            generator.emit(f"{T_place} := {T1_place} * {F_place}")
+            return T_place
+        
+        # T → F
+        elif self.simbolNeterminal == 'T' and self.sirInlocuire == 'F':
+            F_place = place_values[0]
+            return F_place
+        
+        # F → (E)
+        elif self.simbolNeterminal == 'F' and self.sirInlocuire == '(E)':
+            E_place = place_values[1]
+            return E_place
+        
+        # F → a
+        elif self.simbolNeterminal == 'F' and self.sirInlocuire == 'a':
+            a_value = place_values[0]
+            return a_value
+        
+        # Producție fără acțiune semantică definită (ex: E' -> E$)
+        else:
+            return None
         
         
 class TabelGramatica:
